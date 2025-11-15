@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+  # === وب سرور (Django) ===
+  web:
+    build: .
+    command: gunicorn get_price_project.wsgi:application --bind 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+      - db
+    environment:
+      - DEBUG=False
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/getprice_db
+      - REDIS_URL=redis://redis:6379/1
+
+  # === سلری ورکر ===
+  worker:
+    build: .
+    command: celery -A get_price_project worker -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - db
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/getprice_db
+      - REDIS_URL=redis://redis:6379/1
+
+  # === سلری بیت (scheduler) ===
+  beat:
+    build: .
+    command: celery -A get_price_project beat -l info
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+      - db
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@db:5432/getprice_db
+      - REDIS_URL=redis://redis:6379/1
+
+  # === ردیس ===
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  # === دیتابیس (PostgreSQL) - اختیاری، اگر از SQLite استفاده می‌کنی حذف کن ===
+  db:
+    image: postgres:15-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=getprice_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
+  redis_data:
