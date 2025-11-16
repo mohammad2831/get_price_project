@@ -1,9 +1,10 @@
+# docker-compose.yml
 version: '3.9'
 
 services:
-  # === وب سرور (Django) ===
   web:
     build: .
+    container_name: get_price_web
     command: gunicorn get_price_project.wsgi:application --bind 0.0.0.0:8000
     volumes:
       - .:/app
@@ -11,59 +12,55 @@ services:
       - "8000:8000"
     depends_on:
       - redis
-      - db
     environment:
-      - DEBUG=False
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/getprice_db
-      - REDIS_URL=redis://redis:6379/1
+      - DEBUG=True
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - app-network
 
-  # === سلری ورکر ===
-  worker:
+  celery:
     build: .
-    command: celery -A get_price_project worker -l info
+    container_name: get_price_celery
+    command: celery -A get_price_project.celery worker --loglevel=info
     volumes:
       - .:/app
     depends_on:
       - redis
-      - db
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/getprice_db
-      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - app-network
 
-  # === سلری بیت (scheduler) ===
-  beat:
+  celery-beat:
     build: .
-    command: celery -A get_price_project beat -l info
+    container_name: get_price_celery_beat
+    command: celery -A get_price_project.celery beat --loglevel=info
     volumes:
       - .:/app
     depends_on:
       - redis
-      - db
     environment:
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/getprice_db
-      - REDIS_URL=redis://redis:6379/1
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    networks:
+      - app-network
 
-  # === ردیس ===
   redis:
     image: redis:7-alpine
+    container_name: get_price_redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
     command: redis-server --appendonly yes
-
-  # === دیتابیس (PostgreSQL) - اختیاری، اگر از SQLite استفاده می‌کنی حذف کن ===
-  db:
-    image: postgres:15-alpine
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=getprice_db
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    ports:
-      - "5432:5432"
+      - redis-data:/data
+    networks:
+      - app-network
 
 volumes:
-  postgres_data:
-  redis_data:
+  redis-data:
+
+networks:
+  app-network:
+    driver: bridge
