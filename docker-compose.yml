@@ -1,23 +1,19 @@
-# docker-compose.yml
-version: '3.9'
+version: '3.8'
 
 services:
   web:
     build: .
     container_name: get_price_web
-    command: gunicorn get_price_project.wsgi:application --bind 0.0.0.0:8000
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
     volumes:
       - .:/app
-    ports:
-      - "8000:8000"
-    depends_on:
-      - redis
     environment:
-      - DEBUG=True
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_HOST=rexgold_redis_1
+      - DOCKER_ENV=1
     networks:
-      - app-network
+      - rexgold_app_network
 
   celery:
     build: .
@@ -25,42 +21,28 @@ services:
     command: celery -A get_price_project.celery worker --loglevel=info
     volumes:
       - .:/app
-    depends_on:
-      - redis
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_HOST=rexgold_redis_1
+      - DOCKER_ENV=1
+    depends_on:
+      - web
     networks:
-      - app-network
+      - rexgold_app_network
 
-  celery-beat:
+  celery_beat:
     build: .
     container_name: get_price_celery_beat
     command: celery -A get_price_project.celery beat --loglevel=info
     volumes:
       - .:/app
-    depends_on:
-      - redis
     environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - REDIS_HOST=rexgold_redis_1
+      - DOCKER_ENV=1
+    depends_on:
+      - web
     networks:
-      - app-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: get_price_redis
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis-data:/data
-    networks:
-      - app-network
-
-volumes:
-  redis-data:
+      - rexgold_app_network
 
 networks:
-  app-network:
-    driver: bridge
+  rexgold_app_network:
+    external: true

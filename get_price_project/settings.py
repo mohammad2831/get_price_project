@@ -1,13 +1,13 @@
 from datetime import timedelta
 from pathlib import Path
+import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 SECRET_KEY = 'django-insecure-i)g^f=tb=)q8$@qx4q7!iaoe5-$l&+x&&(xd#^*h82m4c#5*do'
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['app-rxg.ir', "www.app-rxg.ir", 'localhost','127.0.0.1','185.10.75.158', '94.182.155.166']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -108,12 +108,17 @@ REST_FRAMEWORK = {
 
 
 
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+#CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+#CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 
+
+REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
+
+CELERY_BROKER_URL = f'redis://{REDIS_HOST}:6379/0'
+CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:6379/0'
 
 
 REDIS_CONFIG = {
@@ -126,13 +131,11 @@ REDIS_CONFIG = {
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
+        "LOCATION": f"redis://{REDIS_HOST}:6379/1",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "SERIALIZER": "django_redis.serializers.json.JSONSerializer",  
         },
-        "KEY_PREFIX": "khakpour",
-        "VERSION": 1,
+        "KEY_PREFIX": "getprice",
     }
 }
 KHAKPOUR_TOKEN_CACHE_KEY = 'KhakpourToken' 
