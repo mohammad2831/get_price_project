@@ -1,4 +1,5 @@
-version: '3.8'
+# /media/mohammad/project/get_price_rexgold/get_price_project/docker-compose.yml
+version: '3.9'        # این خط رو می‌تونی حذف کنی یا نگه داری (هشدار فقط)
 
 services:
   web:
@@ -10,39 +11,39 @@ services:
     volumes:
       - .:/app
     environment:
-      - REDIS_HOST=rexgold_redis_1
+      - DEBUG=True
       - DOCKER_ENV=1
     networks:
-      - rexgold_app_network
+      - redis_net
+    # ← depends_on حذف شد! چون ردیس‌ها در فایل دیگه هستن
 
   celery:
     build: .
-    container_name: get_price_celery
-    command: celery -A get_price_project.celery worker --loglevel=info
+    container_name: get_price_celery_worker
+    command: celery -A get_price_project.celery worker --loglevel=info --concurrency=4
     volumes:
       - .:/app
     environment:
-      - REDIS_HOST=rexgold_redis_1
+      - DEBUG=True
       - DOCKER_ENV=1
-    depends_on:
-      - web
     networks:
-      - rexgold_app_network
+      - redis_net
+    # depends_on حذف شد
 
-  celery_beat:
+  celery-beat:
     build: .
     container_name: get_price_celery_beat
     command: celery -A get_price_project.celery beat --loglevel=info
     volumes:
       - .:/app
     environment:
-      - REDIS_HOST=rexgold_redis_1
+      - DEBUG=True
       - DOCKER_ENV=1
-    depends_on:
-      - web
     networks:
-      - rexgold_app_network
+      - redis_net
+    # depends_on حذف شد
 
 networks:
-  rexgold_app_network:
+  redis_net:
+    name: redis_backend_network
     external: true

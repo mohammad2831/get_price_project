@@ -3,13 +3,7 @@ from rest_framework import status
 import redis
 import json
 from datetime import datetime
-#import rek
-#from GeneratePrice_Module.models import ProductPrice
-#from GeneratePrice_Module.consumers import PriceConsumer
 from asgiref.sync import async_to_sync
-#from channels.layers import get_channel_layer
-
-#from django_redis import get_redis_connectionk
 from django.core.cache import cache
 from django.conf import settings
 from . redis_publisher import publish_price_change
@@ -171,17 +165,9 @@ def fetch_product_prices():
 
 
 
-
 def save_prices_to_redis(data: dict):
-    redis_client = get_redis_connection("default")
-    """
-    ذخیره قیمت‌ها در ردیس فقط اگر تغییر کرده باشند.
-    
-    - مقایسه با مقدار قبلی
-    - فقط تغییر → ذخیره + پیام
-    - بدون وب‌سوکت، بدون دیتابیس
-    """
-    # نقشه نام فارسی → کلید کوتاه
+    redis_client = settings.REDIS_PRICE    # حتماً redis-price باشه!
+
     PRODUCT_KEYS = {
         "نقد فردا": "naghd-farda",
         "ربع 86": "robe-86",
@@ -191,20 +177,17 @@ def save_prices_to_redis(data: dict):
         "تمام سکه 86": "tamam-86"
     }
 
-    # چک داده ورودی
     if not data.get("data"):
-        print("No valid data to cache")
+        print("No valid data to save")
         return
 
-    # اتصال به ردیس
     try:
         redis_client.ping()
-        print("Connected to Redis")
     except Exception as e:
-        print(f"Redis connection error: {e}")
+        print(f"Redis-Price connection error: {e}")
         return
 
-    updated = False  # آیا تغییری رخ داد؟
+    updated_count = 0
 
     for category in data["data"]:
         for product in category.get("products", []):
@@ -212,185 +195,41 @@ def save_prices_to_redis(data: dict):
             buy_price = product.get("buy_price", 0)
             sell_price = product.get("sell_price", 0)
 
-            # پیدا کردن لیبل
             label = PRODUCT_KEYS.get(title_fa)
             if not label:
-                continue  # محصول ناشناخته
+                continue
 
-            # کلیدهای ردیس
             buy_key = f"{label}-buy"
             sell_key = f"{label}-sell"
-
-            # خواندن قیمت قبلی
-            old_buy = redis_client.get(buy_key)
-            old_sell = redis_client.get(sell_key)
-
-            old_buy_val = old_buy.decode('utf-8') if old_buy else None
-            old_sell_val = old_sell.decode('utf-8') if old_sell else None
 
             new_buy_str = str(buy_price)
             new_sell_str = str(sell_price)
 
-            # مقایسه
-            if new_buy_str != old_buy_val or new_sell_str != old_sell_val:
-                # تغییر کرد → ذخیره
-                try:
-                    redis_client.set(buy_key, new_buy_str, ex=300)  # 5 دقیقه
-                    redis_client.set(sell_key, new_sell_str, ex=300)
-                    
-                    print(f"قیمت تغییر کرد → {title_fa}")
-                    print(f"   خرید: {old_buy_val or '-'} → {new_buy_str}")
-                    print(f"   فروش: {old_sell_val or '-'} → {new_sell_str}")
-                    print(f"   کلیدها: {buy_key}, {sell_key}")
-                    print("-" * 50)
+            # فقط اگر تغییر کرد، publish کن و ذخیره کن
+            old_buy = redis_client.get(buy_key)
+            old_sell = redis_client.get(sell_key)
 
-                    publish_price_change(
-                        product_label=label,
-                        title_fa=title_fa,
-                        old_buy=old_buy_val,
-                        old_sell=old_sell_val,
-                        new_buy=new_buy_str,
-                        new_sell=new_sell_str
-                    )
-                    
-                    updated = True
-                except Exception as e:
-                    print(f"خطا در ذخیره در ردیس: {e}")
-            # else: تغییری نکرد → هیچی
+            if old_buy != new_buy_str or old_sell != new_sell_str:
+                # ذخیره قیمت جدید (بدون TTL! چون همیشه آخرین مقدار مهمه)
+                redis_client.set(buy_key, new_buy_str)      # ex=300 حذف شد
+                redis_client.set(sell_key, new_sell_str)    # ex=300 حذف شد
 
-    if not updated:
-        print("هیچ قیمتی تغییر نکرده است.")
+                print(f"قیمت بروزرسانی شد → {title_fa}")
+                print(f"   خرید: {old_buy} → {new_buy_str}")
+                print(f"   فروش: {old_sell} → {new_sell_str}")
 
+                # publish تغییر قیمت
+                publish_price_change(
+                    product_label=label,
+                    title_fa=title_fa,
+                    old_buy=old_buy,
+                    old_sell=old_sell,
+                    new_buy=new_buy_str,
+                    new_sell=new_sell_str
+                )
+                updated_count += 1
 
-'''
-def fetch_product_prices():
-    #update_prices()
-
-    # Your request details
-    url = "https://api.khakpourgold.com/products"
-    headers = {
-        "Host": "api.khakpourgold.com",
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "en-US,en;q=0.5",
-        "Accept-Encoding": "gzip, deflate, br, zstd",
-        "Cache-Control": "no-cache",
-        "X-Verify": "964503326",
-        "Origin":"https://panel.khakpourgold.com",
-
-        "Connection": "keep-alive",
-        "Referer": "https://panel.khakpourgold.com/",
-        "Sec-Fetch-Dest": "empty",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Site": "same-site",
-        "TE": "trailers",
-    }
-
-
-    cookies = {"access_token_web":"eyJpdiI6IlY2NkVkOEE0TmxENk5zb2VBN3c0Vnc9PSIsInZhbHVlIjoiek9KRk9Ib1VadW5FdlVmdWpteWp3cFlOdktqVlhuUDdoUEY4aXpobk53YlBIeGRqMDhPS1FJbS96YlVnbHErMVJjM3FOenBJZlVUbWtFdzZucU5DVFo5c2ZWYmVjR2pHRkluRkRhMk0rYlprM3VvdFYwMHhDU2ZhcFNhUUpWU3p3RXh6dkVsODQyV0h5cWtNR2FpYUorWTdxSEVzd2hPV2RSdTkzQWxkZXl4SVZmdTdWTjRWbERIZ0x0QmJPSE1xb3Z4WVYxQTFVOWpoZTR3d3pUZ3I2allEVHRQV2FTZkV3STBabnJ1TUNuZTdPWERKZk1OcU82ZWpRNlA4MWtKdURhTnJseU9uekxSSkd6WGl5bURPK095dGdBUlZYekdpZFlpZytER0ovaWFaWDhYY0xGSEJOcGZ2andTMVRjdk8iLCJtYWMiOiJlNjk5NTU1OGU0MGUyM2Q1MGYxMWJlMTg2YTVkMzE0MTg3OTlmNjI1NDgyOTExZWE2MGQxNDYzODY4NjdjMzk5IiwidGFnIjoiIn0%3D"}
-    try:
-        response = requests.get(url, headers=headers, cookies=cookies)
-    except requests.exceptions.RequestException as e:
-        return {
-            'status': 'error',
-            'message': f'A network error occurred: {e}'
-        }, status.HTTP_503_SERVICE_UNAVAILABLE
-
-    if response.status_code == status.HTTP_401_UNAUTHORIZED:
-        return {
-            'status': 'error',
-            'message': 'مشکلی پیش امده است'
-        }, status.HTTP_401_UNAUTHORIZED
-
-    if response.status_code == status.HTTP_200_OK:
-        data = response.json()
-        categories = data.get('data', [])
-
-        if not categories:
-            return {
-                'status': 'error',
-                'message': 'فروشگاه در دسترس نیست'
-            }, status.HTTP_404_NOT_FOUND
-
-        result = []
-        invalid_prices = []
-
-
-
-
-        for category in categories:
-            category_title = category.get('title', 'Unknown Category')
-            products = []
-            for product in category.get('products', []):
-                buy_price = product.get('buy_price', 0)
-                sell_price = product.get('sell_price', 0)
-
-                if buy_price == -1 or sell_price == -1:
-                    invalid_prices.append({
-                        'category': category_title,
-                        'product': product.get('title', 'Unknown Product'),
-                        'buy_price': buy_price,
-                        'sell_price': sell_price
-                    })
-
-                products.append({
-                    'title': product.get('title', 'Unknown Product'),
-                    'buy_price': buy_price,
-                    'sell_price': sell_price
-                })
-            result.append({
-                'category': category_title,
-                'products': products
-            })
-
-        # همیشه داده‌ها را به Redis ذخیره کن، حتی اگر قیمت‌های نامعتبر وجود داشته باشند
-        response_data = {'status': 'success', 'data': result}
-        #save_prices_to_redis(response_data)
-
-        if invalid_prices:
-            return {
-                'status': 'warning',
-                'message': 'Some products have invalid prices (-1).',
-                'invalid_products': invalid_prices,
-                'data': result
-            }, status.HTTP_206_PARTIAL_CONTENT
-
-        return {'status': 'success', 'data': result}, status.HTTP_200_OK
-
+    if updated_count == 0:
+        print("هیچ قیمتی تغییر نکرد.")
     else:
-        return {
-            'status': 'error',
-            'message': f'Failed to get data. Status code: {response.status_code}',
-            'response_text': response.text
-        }, status.HTTP_500_INTERNAL_SERVER_ERROR
-
-'''
-
-
-'''
-redis_client = redis.StrictRedis(
-    host="localhost",  # یا سرور Redis
-    port=6379,
-    db=0,
-    decode_responses=True
-)
-'''
-
-
-
-'''
-def update_prices():
-    channel_layer = get_channel_layer()
-    price_data = {
-        'product_id': 1,
-        'base_price': 1500.00 + (25 * 100)  # قیمت تصادفی برای تست
-    }
-    async_to_sync(channel_layer.group_send)(
-        'prices_global',  # یا f'user_{user_id}' برای کاربر خاص
-        {
-            'type': 'price_update',
-            'price_data': price_data
-        }
-    )
-
-'''
+        print(f"تعداد {updated_count} محصول بروزرسانی شد.")

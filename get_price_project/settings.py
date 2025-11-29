@@ -2,7 +2,7 @@ from datetime import timedelta
 from pathlib import Path
 import os
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+import redis
 
 SECRET_KEY = 'django-insecure-i)g^f=tb=)q8$@qx4q7!iaoe5-$l&+x&&(xd#^*h82m4c#5*do'
 DEBUG = True
@@ -108,38 +108,85 @@ REST_FRAMEWORK = {
 
 
 
-#CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
-#CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
 
 
-REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
-
-CELERY_BROKER_URL = f'redis://{REDIS_HOST}:6379/0'
-CELERY_RESULT_BACKEND = f'redis://{REDIS_HOST}:6379/0'
 
 
-REDIS_CONFIG = {
-    'HOST': 'localhost', 
-    'PORT': 6379,
-    'PASSWORD': None, 
-    'DB': 0,
-}
 
+
+
+# ──────────────────────────────────────────────────────────────
+# ۱. کش جنگو + توکن‌ها → فقط redis-cache
+# ──────────────────────────────────────────────────────────────
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": f"redis://{REDIS_HOST}:6379/1",
+        "LOCATION": "redis://redis-cache:6379/0",
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
         "KEY_PREFIX": "getprice",
     }
 }
-KHAKPOUR_TOKEN_CACHE_KEY = 'KhakpourToken' 
-KHAKPOUR_TOKEN_EXPIRY = 4 * 24 * 60 * 60 
+
+# ──────────────────────────────────────────────────────────────
+# ۲. سلری و بیت → فقط redis-celery
+# ──────────────────────────────────────────────────────────────
+CELERY_BROKER_URL = "redis://redis-celery:6379/0"
+CELERY_RESULT_BACKEND = "redis://redis-celery:6379/1"
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = "Asia/Tehran"
+CELERY_ENABLE_UTC = False
+
+# ──────────────────────────────────────────────────────────────
+# ۳. اتصال مستقیم به redis-price برای قیمت + pub/sub
+# ──────────────────────────────────────────────────────────────
+REDIS_PRICE = redis.Redis(
+    host='redis-price',
+    port=6379,
+    db=0,
+    password=None,
+    decode_responses=True,
+    socket_keepalive=True,
+    retry_on_timeout=True,
+    health_check_interval=30,
+)
+
+# اسم چنل pub/sub (ثابت باشه برای همه پروژه‌ها)
+CHANNEL_PRICE_LIVE = "prices:livedata"
+
+# ──────────────────────────────────────────────────────────────
+# ۴. کش توکن خاکپور (از redis-cache خونده میشه)
+# ──────────────────────────────────────────────────────────────
+KHAKPOUR_TOKEN_CACHE_KEY = 'KhakpourToken'
+KHAKPOUR_TOKEN_EXPIRY = 4 * 24 * 60 * 60  # ۴ روز
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

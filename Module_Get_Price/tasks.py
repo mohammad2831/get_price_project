@@ -6,8 +6,7 @@ from celery import shared_task
 # اگر در این فایل فقط به تابع fetch_product_prices نیاز دارید، همین یک خط کافی است
 from .get_data_khakpour import fetch_product_prices # مسیر وارد کردن تابع شما
 
-# از نامی استفاده کنید که در تنظیمات Celery Beat تعریف شده است:
-# 'task': 'Module_Get_Price.tasks.fetch_product_prices_khakpour'
+
 
 @shared_task(name='Module_Get_Price.tasks.fetch_product_prices_khakpour')
 def fetch_product_prices_khakpour(): # نام تابع را تغییر دهید
